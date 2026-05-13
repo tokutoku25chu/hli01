@@ -100,6 +100,10 @@ MODEL_FULL_BODY_CATEGORIES = {
     "04_タオル・ローブ",
 }
 
+# 修正2: ベッド系のサムネイル左カットを抑制するマーカー
+# 例: mrblkt-other-sofa_1.jpg ← ベッド以外のシーン（椅子・ソファ等）はサムネイルも中央クロップ
+OTHER_SCENE_MARKER = "-other"
+
 # 入力フォルダ
 INPUT_DIR = Path("input")
 
@@ -200,16 +204,29 @@ OUTPUT_SPECS: List[OutputSpec] = [
 # Windows がコピー時に付ける「のコピー」「のコピー2」「のコピー (2)」末尾を除去する正規表現
 _COPY_SUFFIX_RE = re.compile(r"\s*のコピー(?:\s*\(?\s*\d+\s*\)?)?\s*$")
 
+# 末尾の「(1)」「(2)」等を除去する正規表現（Windows の重複ファイル名対策）
+_PAREN_SUFFIX_RE = re.compile(r"\s*\(\s*\d+\s*\)\s*$")
+
 
 def normalize_product_id(stem: str) -> str:
-    """商品ID 照合用に stem を正規化する。
+    """商品ID 照合 & 出力ファイル名に使う stem の正規化。
 
-    - 前後の空白を削除
-    - 末尾の「のコピー」「のコピー2」「のコピー (2)」等を除去
+    繰り返し以下を末尾から除去し、変化が無くなるまで適用：
+    - 前後の空白
+    - 「のコピー」「のコピー2」「のコピー (2)」等（Windows のコピー作成時のサフィックス）
+    - 「(1)」「(2)」等（Windows の重複ファイル名）
+
+    例：「foo のコピー (2)」→「foo」、「marinarobe (3)」→「marinarobe」
     """
     s = stem.strip()
-    s = _COPY_SUFFIX_RE.sub("", s)
-    return s.strip()
+    while True:
+        before = s
+        s = _COPY_SUFFIX_RE.sub("", s)
+        s = _PAREN_SUFFIX_RE.sub("", s)
+        s = s.strip()
+        if s == before:
+            break
+    return s
 
 
 def load_size_csv(path: Path) -> Dict[str, ImageMapping]:

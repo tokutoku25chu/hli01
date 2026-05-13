@@ -138,7 +138,8 @@ def process_one_image(
     if entry and entry.new_name:
         output_stem = entry.new_name
     else:
-        output_stem = U.transform_stem(raw_stem, model_name)
+        # 修正4: モデル placeholder 置換 → 「のコピー」「(N)」等を自動削除
+        output_stem = U.normalize_product_id(U.transform_stem(raw_stem, model_name))
 
     # バッジ可否
     size_code = entry.size_code if entry else None
@@ -178,8 +179,11 @@ def process_one_image(
                         vert_top, vert_bot = 0.05, 0.45
                     else:
                         vert_top, vert_bot = 0.10, 0.95
-                elif spec.can_badge and category in U.BED_CATEGORIES:
+                elif (spec.can_badge
+                      and category in U.BED_CATEGORIES
+                      and U.OTHER_SCENE_MARKER not in raw_stem):
                     # 修正1: ベッド系のサムネイルのみ左カット
+                    # 修正2: ただしファイル名に -other を含む場合は中央クロップ
                     shift = 0.15
 
                 resized = U.crop_and_resize(im, spec.width, spec.height, shift,
