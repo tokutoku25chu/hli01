@@ -1,0 +1,37 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# === 仮想環境 ===
+.venv/
+venv/
+env/
+ENV/
+
+# === 入力画像（カメラマンの実画像はリポジトリにアップしない） ===
+input/*
+!input/.gitkeep
+
+# === 生成物 ===
+out/
+*.zip
+
+# === ランタイム成果物 ===
+error_log.txt
+streamlit.log
+streamlit.log.err
+_stdin.txt
+
+# === エディタ ===
+.vscode/
+.idea/
+
+# === OS ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Streamlit シークレット（将来用） ===
+.streamlit/secrets.toml
