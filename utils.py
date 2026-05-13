@@ -90,6 +90,16 @@ BADGE_FLOURISH_COLOR = (255, 255, 255, 220)
 # モデル画像 placeholder（ファイル名内のこの文字列を _model{モデル名}_ に置換）
 MODEL_MARKER = "_model_"
 
+# モデル写真全般を判別する広めのマーカー（_model_ プレースホルダも _model 検出に含む）
+# 修正3 (ウェア/ローブ×モデル) で「このファイルはモデル着用画像か」を判定するのに使う
+MODEL_SCENE_MARKER = "_model"
+
+# 修正3: ファイル名に _model を含む場合に「全身クロップ」を適用するカテゴリ
+MODEL_FULL_BODY_CATEGORIES = {
+    "02_ウェア",
+    "04_タオル・ローブ",
+}
+
 # 入力フォルダ
 INPUT_DIR = Path("input")
 
@@ -322,14 +332,43 @@ def compute_crop_box(
     src_w: int, src_h: int,
     tgt_w: int, tgt_h: int,
     shift_x_ratio: float = 0.0,
+    vert_top_ratio: Optional[float] = None,
+    vert_bottom_ratio: Optional[float] = None,
 ) -> Tuple[int, int, int, int]:
     """ソース画像から、ターゲット縦横比に切り出すための (left, top, right, bottom) を返す。
 
-    - target がソースより横長 → 上下カット（垂直中央）
-    - target がソースより縦長／正方形 → 左右カット（水平中央 + shift_x_ratio）
-    - shift_x_ratio はソース幅に対する比率。+0.15 なら中心が右に15%動く（左側が多くカットされる）。
-    - 切り出し範囲は画像境界内にクランプ。
+    通常モード（vert_*_ratio が None）:
+      - target がソースより横長 → 上下カット（垂直中央）
+      - target がソースより縦長／正方形 → 左右カット（水平中央 + shift_x_ratio）
+      - shift_x_ratio はソース幅に対する比率。+0.15 なら中心が右に15%動く。
+
+    縦範囲指定モード（vert_top_ratio, vert_bottom_ratio が指定された場合）:
+      - 縦は固定範囲 [src_h * top, src_h * bottom] に切り出す
+      - 横はターゲット縦横比に合わせて水平中央クロップ
+      - shift_x_ratio はこのモードでは無視
+      - 修正3 (ウェア/ローブ × モデルの全身クロップ) で使用
+
+    範囲はソース境界内にクランプ。
     """
+    # ---- 縦範囲指定モード（修正3 用） ----
+    if vert_top_ratio is not None and vert_bottom_ratio is not None:
+        top    = int(round(src_h * vert_top_ratio))
+        bottom = int(round(src_h * vert_bottom_ratio))
+        # ソース境界内にクランプ
+        top    = max(0, min(top, src_h - 1))
+        bottom = max(top + 1, min(bottom, src_h))
+        crop_h = bottom - top
+
+        tgt_ar = tgt_w / tgt_h
+        crop_w = int(round(crop_h * tgt_ar))
+        # 横幅がソースを超える場合はソース幅にクランプ
+        crop_w = min(crop_w, src_w)
+        left   = max(0, (src_w - crop_w) // 2)
+        if left + crop_w > src_w:
+            left = src_w - crop_w
+        return (left, top, left + crop_w, top + crop_h)
+
+    # ---- 通常モード（既存挙動） ----
     src_ar = src_w / src_h
     tgt_ar = tgt_w / tgt_h
 
@@ -358,9 +397,15 @@ def crop_and_resize(
     img: Image.Image,
     tgt_w: int, tgt_h: int,
     shift_x_ratio: float,
+    vert_top_ratio: Optional[float] = None,
+    vert_bottom_ratio: Optional[float] = None,
 ) -> Image.Image:
-    """compute_crop_box でクロップ → Lanczos でリサイズ。"""
-    box = compute_crop_box(img.width, img.height, tgt_w, tgt_h, shift_x_ratio)
+    """compute_crop_box でクロップ → Lanczos でリサイズ。
+
+    vert_top_ratio / vert_bottom_ratio を渡すと縦範囲指定モード（修正3 用）。
+    """
+    box = compute_crop_box(img.width, img.height, tgt_w, tgt_h,
+                            shift_x_ratio, vert_top_ratio, vert_bottom_ratio)
     cropped = img.crop(box)
     return cropped.resize((tgt_w, tgt_h), Image.Resampling.LANCZOS)
 
@@ -534,4 +579,4 @@ def transform_stem(stem: str, model_name: Optional[str]) -> str:
         return stem
     if MODEL_MARKER not in stem:
         return stem
-    return stem.replace(MODEL_MARKER, f"-model{model_name}_")
+    return stem.replace(MODEL_MARKER, f"_model{model_name}_")

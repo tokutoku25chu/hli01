@@ -35,3 +35,4 @@ desktop.ini
 
 # === Streamlit シークレット（将来用） ===
 .streamlit/secrets.toml
+input_backup/

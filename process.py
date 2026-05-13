@@ -147,6 +147,12 @@ def process_one_image(
         and size_code is not None
     )
 
+    # 修正3: ウェア / ローブ × モデルの全身クロップ判定
+    is_full_body_model = (
+        category in U.MODEL_FULL_BODY_CATEGORIES
+        and U.MODEL_SCENE_MARKER in raw_stem
+    )
+
     with Image.open(src) as im:
         im.load()
         # EXIF Orientation を反映
@@ -162,10 +168,22 @@ def process_one_image(
             if spec.format == "ORIGINAL":
                 U.copy_original(src, out_path)
             else:
-                # ベッド系カテゴリのサムネイル (1200×1200 バッジ対象) のみ左カット
-                # それ以外はすべて完全中央クロップ
-                shift = 0.15 if (spec.can_badge and category in U.BED_CATEGORIES) else 0.0
-                resized = U.crop_and_resize(im, spec.width, spec.height, shift)
+                shift    = 0.0
+                vert_top = None
+                vert_bot = None
+
+                if is_full_body_model:
+                    # 修正3: 横長 (>1.5) は顔〜上半身、それ以外は全身
+                    if spec.width / spec.height > 1.5:
+                        vert_top, vert_bot = 0.05, 0.45
+                    else:
+                        vert_top, vert_bot = 0.10, 0.95
+                elif spec.can_badge and category in U.BED_CATEGORIES:
+                    # 修正1: ベッド系のサムネイルのみ左カット
+                    shift = 0.15
+
+                resized = U.crop_and_resize(im, spec.width, spec.height, shift,
+                                             vert_top, vert_bot)
                 if spec.can_badge and badge_eligible:
                     resized = U.draw_size_badge(resized, size_code, font_path)
                     counts["バッジ付与"] += 1
