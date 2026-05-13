@@ -73,6 +73,27 @@ def prompt_model_name(count: int) -> str:
         print("空のモデル名は使えません。")
 
 
+def prompt_banner() -> tuple:
+    """スライダー用バナーの設定（日英コピー、レイアウト）を対話で取得。
+
+    両方のコピーが空ならバナーはスキップ（return ("", "", "center")）。
+    """
+    print("\n📋 スライダー用バナー設定（空のままなら通常のスライダー画像）")
+    jp = input("日本語キャッチコピー (例: 毎日の眠りを、やさしく満たす) > ").strip()
+    en = input("英語キャッチコピー  (例: Dress the Bed)              > ").strip()
+    if not jp and not en:
+        return ("", "", U.BANNER_LAYOUT_CENTER)
+
+    print("\nバナーレイアウト:")
+    for i, layout in enumerate(U.BANNER_LAYOUTS, 1):
+        print(f"  {i}. {layout:<12s} ({U.BANNER_LAYOUT_LABELS_JP[layout]})")
+    while True:
+        raw = input("> ").strip()
+        if raw.isdigit() and 1 <= int(raw) <= len(U.BANNER_LAYOUTS):
+            return (jp, en, U.BANNER_LAYOUTS[int(raw) - 1])
+        print(f"1〜{len(U.BANNER_LAYOUTS)} の範囲で入力してください。")
+
+
 def confirm_continue(prompt: str) -> bool:
     """y/n 確認。デフォルトは n（安全側）。"""
     ans = input(f"{prompt} [y/N]: ").strip().lower()
@@ -119,6 +140,9 @@ def process_one_image(
     size_list: Dict[str, "U.ImageMapping"],
     font_path: Path,
     model_name: Optional[str],
+    jp_copy: str = "",
+    en_copy: str = "",
+    banner_layout: str = "center",
 ) -> Dict[str, int]:
     """1枚の画像を全6出力へ書き出す。各出力の成功数を返す。
 
@@ -191,6 +215,12 @@ def process_one_image(
                 if spec.can_badge and badge_eligible:
                     resized = U.draw_size_badge(resized, size_code, font_path)
                     counts["バッジ付与"] += 1
+                # スライダー (PC / モバイル) にはバナーテキストを重ねる
+                if spec.is_slider and (jp_copy or en_copy):
+                    resized = U.draw_banner_text(
+                        resized, jp_copy, en_copy, banner_layout,
+                        U.ALLURA_FONT_PATH, font_path,
+                    )
                 U.save_webp(resized, out_path, spec.quality)
 
             counts[spec.label] += 1
@@ -282,6 +312,11 @@ def main() -> int:
         model_name = prompt_model_name(model_count)
         print(f"👤 モデル名: {model_name}（{model_count} 枚に適用）")
 
+    # 3.5 スライダー用バナーのコピー & レイアウト
+    jp_copy, en_copy, banner_layout = prompt_banner()
+    if jp_copy or en_copy:
+        print(f"🎨 バナー: 日「{jp_copy}」/ 英「{en_copy}」/ レイアウト「{banner_layout}」")
+
     # 4. 出力ベース確認
     base = resolve_output_base(args.output_base)
     if base is None:
@@ -319,7 +354,10 @@ def main() -> int:
     t0 = time.time()
     for src in tqdm(images, desc="処理中", unit="枚"):
         try:
-            counts = process_one_image(src, category, series_root, size_list, font_path, model_name)
+            counts = process_one_image(
+                src, category, series_root, size_list, font_path, model_name,
+                jp_copy=jp_copy, en_copy=en_copy, banner_layout=banner_layout,
+            )
             for label, n in counts.items():
                 if label == "バッジ付与":
                     total_badge += n

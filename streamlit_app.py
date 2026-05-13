@@ -75,6 +75,24 @@ model_name_input = st.text_input(
     help="画像名に -model_ が含まれる場合に置換される名前",
 )
 
+# --- スライダー用バナー設定 ---
+with st.expander("🎨 スライダー用バナー設定（任意）", expanded=False):
+    st.caption("スライダー PC / スマホ画像にキャッチコピーを重ねます。両方空ならバナーなし。")
+    jp_copy_input = st.text_input(
+        "日本語キャッチコピー",
+        placeholder="例: 毎日の眠りを、やさしく満たす",
+    )
+    en_copy_input = st.text_input(
+        "英語キャッチコピー (Allura フォント)",
+        placeholder="例: Dress the Bed",
+    )
+    banner_layout_input = st.selectbox(
+        "レイアウト",
+        U.BANNER_LAYOUTS,
+        index=U.BANNER_LAYOUTS.index(U.BANNER_LAYOUT_CENTER),
+        format_func=lambda v: f"{v} ({U.BANNER_LAYOUT_LABELS_JP[v]})",
+    )
+
 st.divider()
 
 go = st.button(
@@ -163,6 +181,9 @@ if go:
                         size_list,
                         font_path,
                         model_name,
+                        jp_copy=jp_copy_input,
+                        en_copy=en_copy_input,
+                        banner_layout=banner_layout_input,
                     )
                     for label, n in counts.items():
                         if label == "バッジ付与":

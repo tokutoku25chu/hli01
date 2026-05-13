@@ -126,6 +126,7 @@ class OutputSpec:
     format: str             # "WEBP" | "ORIGINAL"
     quality: int            # WebPのみ有効
     can_badge: bool         # この出力にバッジを描画する候補か（サムネイルのみTrue）
+    is_slider: bool = False # スライダー用（バナーテキストを重ねる候補）
 
 
 @dataclass(frozen=True)
@@ -184,6 +185,7 @@ OUTPUT_SPECS: List[OutputSpec] = [
         format="WEBP",
         quality=WEBP_QUALITY_NORMAL,
         can_badge=False,
+        is_slider=True,
     ),
     # スライダー スマホ
     OutputSpec(
@@ -193,8 +195,36 @@ OUTPUT_SPECS: List[OutputSpec] = [
         format="WEBP",
         quality=WEBP_QUALITY_NORMAL,
         can_badge=False,
+        is_slider=True,
     ),
 ]
+
+# =============================================================================
+# バナー（スライダー用テキストオーバーレイ）
+# =============================================================================
+
+# Allura（英語コピー用筆記体）。OFL ライセンス、Google Fonts 配布。
+ALLURA_FONT_PATH = Path(__file__).parent / "assets" / "fonts" / "Allura-Regular.ttf"
+
+# バナーレイアウト識別子
+BANNER_LAYOUT_RIGHT       = "right"        # 右側にコピー（Dress the Bed 風）
+BANNER_LAYOUT_LEFT        = "left"         # 左側にコピー（Marina Turkish 風）
+BANNER_LAYOUT_BOTTOM_BAND = "bottom_band"  # 下部に半透明バンド（Down Pillow 風）
+BANNER_LAYOUT_CENTER      = "center"       # 中央配置
+
+BANNER_LAYOUTS: List[str] = [
+    BANNER_LAYOUT_RIGHT,
+    BANNER_LAYOUT_LEFT,
+    BANNER_LAYOUT_BOTTOM_BAND,
+    BANNER_LAYOUT_CENTER,
+]
+
+BANNER_LAYOUT_LABELS_JP = {
+    BANNER_LAYOUT_RIGHT:       "右側にコピー",
+    BANNER_LAYOUT_LEFT:        "左側にコピー",
+    BANNER_LAYOUT_BOTTOM_BAND: "下部バンド（半透明）",
+    BANNER_LAYOUT_CENTER:      "中央配置",
+}
 
 
 # =============================================================================
@@ -597,3 +627,149 @@ def transform_stem(stem: str, model_name: Optional[str]) -> str:
     if MODEL_MARKER not in stem:
         return stem
     return stem.replace(MODEL_MARKER, f"_model{model_name}_")
+
+
+# =============================================================================
+# バナー（スライダー用テキストオーバーレイ）描画
+# =============================================================================
+
+def _sample_avg_luminance(img: Image.Image, region: Tuple[int, int, int, int]) -> float:
+    """指定領域の平均輝度（0-255）。コントラスト判定に使う。"""
+    l, t, r, b = region
+    l = max(0, min(l, img.width  - 1))
+    t = max(0, min(t, img.height - 1))
+    r = max(l + 1, min(r, img.width))
+    b = max(t + 1, min(b, img.height))
+    sample = img.crop((l, t, r, b)).convert("RGB").resize((20, 20))
+    pixels = list(sample.getdata())
+    return sum(0.299 * px[0] + 0.587 * px[1] + 0.114 * px[2] for px in pixels) / len(pixels)
+
+
+def _pick_text_color(img: Image.Image, region: Tuple[int, int, int, int]) -> Tuple[int, int, int, int]:
+    """背景の明度に応じてテキスト色を選ぶ。"""
+    lum = _sample_avg_luminance(img, region)
+    if lum > 175:
+        return (60, 50, 38, 255)      # 明るい背景 → 暗いブラウン
+    elif lum < 75:
+        return (245, 240, 225, 255)   # 暗い背景 → クリーム白
+    else:
+        return (250, 245, 230, 255)   # 中間 → 暖かい白
+
+
+def _contrast_outline_color(text_rgba: Tuple[int, int, int, int]) -> Tuple[int, int, int, int]:
+    """テキスト色と反対の側に淡い縁取りを置く（可読性のため）。"""
+    r, g, b, _ = text_rgba
+    if r + g + b > 384:
+        return (0, 0, 0, 70)          # 明るい文字 → 半透明黒の縁
+    return (255, 255, 255, 70)        # 暗い文字 → 半透明白の縁
+
+
+def _banner_layout_config(W: int, H: int, layout: str) -> Dict[str, object]:
+    """レイアウト別の配置パラメータを返す（PC/モバイル共通、比率ベース）。"""
+    base = min(W, H)
+    en_size = max(20, int(base * 0.20))
+    jp_size = max(10, int(base * 0.055))
+
+    if layout == BANNER_LAYOUT_RIGHT:
+        return {
+            "en": {"x": int(W * 0.95), "y": int(H * 0.38), "anchor": "rm", "size": en_size},
+            "jp": {"x": int(W * 0.95), "y": int(H * 0.68), "anchor": "rm", "size": jp_size},
+            "sample_region": (int(W * 0.55), int(H * 0.20), int(W * 0.95), int(H * 0.80)),
+        }
+    if layout == BANNER_LAYOUT_LEFT:
+        return {
+            "en": {"x": int(W * 0.05), "y": int(H * 0.38), "anchor": "lm", "size": en_size},
+            "jp": {"x": int(W * 0.05), "y": int(H * 0.68), "anchor": "lm", "size": jp_size},
+            "sample_region": (int(W * 0.05), int(H * 0.20), int(W * 0.45), int(H * 0.80)),
+        }
+    if layout == BANNER_LAYOUT_BOTTOM_BAND:
+        band_top = int(H * 0.62)
+        return {
+            "band":          (0, band_top, W, H),
+            "jp":            {"x": int(W * 0.5), "y": int(H * 0.74), "anchor": "mm", "size": int(en_size * 0.55)},
+            "en":            {"x": int(W * 0.5), "y": int(H * 0.90), "anchor": "mm", "size": int(jp_size * 0.95)},
+            "sample_region": (0, band_top, W, H),
+        }
+    if layout == BANNER_LAYOUT_CENTER:
+        return {
+            "en": {"x": int(W * 0.5), "y": int(H * 0.40), "anchor": "mm", "size": en_size},
+            "jp": {"x": int(W * 0.5), "y": int(H * 0.62), "anchor": "mm", "size": jp_size},
+            "sample_region": (int(W * 0.25), int(H * 0.30), int(W * 0.75), int(H * 0.70)),
+        }
+    raise ValueError(f"Unknown banner layout: {layout}")
+
+
+def draw_banner_text(
+    img: Image.Image,
+    jp_copy: str,
+    en_copy: str,
+    layout: str,
+    en_font_path: Path,
+    jp_font_path: Path,
+) -> Image.Image:
+    """スライダー画像にバナーテキストを重ねる。
+
+    jp_copy / en_copy がいずれも空なら何もせず返す。
+    色は背景明度から自動選択、可読性のため淡い縁取りを追加する。
+    """
+    jp_copy = (jp_copy or "").strip()
+    en_copy = (en_copy or "").strip()
+    if not jp_copy and not en_copy:
+        return img
+    if layout not in BANNER_LAYOUTS:
+        layout = BANNER_LAYOUT_CENTER
+
+    base = img.convert("RGBA") if img.mode != "RGBA" else img.copy()
+    W, H = base.size
+    cfg = _banner_layout_config(W, H, layout)
+
+    text_color    = _pick_text_color(base, cfg["sample_region"])
+    outline_color = _contrast_outline_color(text_color)
+
+    overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    # 下バンドのみ半透明背景を描画
+    if layout == BANNER_LAYOUT_BOTTOM_BAND and "band" in cfg:
+        # 背景明度に応じてバンド色も調整（暗背景→暗バンド、明背景→明バンド）
+        lum = _sample_avg_luminance(base, cfg["sample_region"])
+        if lum > 175:
+            band_color = (255, 252, 245, 200)   # 明背景: クリーム透過
+        elif lum < 75:
+            band_color = (35, 30, 25, 200)      # 暗背景: 暗ブラウン透過
+        else:
+            band_color = (245, 235, 220, 200)
+        draw.rectangle(cfg["band"], fill=band_color)
+        # バンド上のテキスト色は band_color の補色（簡易）にする
+        text_color    = _pick_text_color(base, cfg["band"]) if lum > 100 else (250, 245, 230, 255)
+        outline_color = _contrast_outline_color(text_color)
+
+    stroke_w = max(1, int(min(W, H) * 0.004))
+
+    # 英語（Allura）
+    if en_copy:
+        en_pos  = cfg["en"]
+        en_font = ImageFont.truetype(str(en_font_path), en_pos["size"])
+        draw.text(
+            (en_pos["x"], en_pos["y"]),
+            en_copy,
+            font=en_font, fill=text_color,
+            anchor=en_pos["anchor"],
+            stroke_width=stroke_w,
+            stroke_fill=outline_color,
+        )
+
+    # 日本語（明朝）
+    if jp_copy:
+        jp_pos  = cfg["jp"]
+        jp_font = ImageFont.truetype(str(jp_font_path), jp_pos["size"])
+        draw.text(
+            (jp_pos["x"], jp_pos["y"]),
+            jp_copy,
+            font=jp_font, fill=text_color,
+            anchor=jp_pos["anchor"],
+            stroke_width=stroke_w,
+            stroke_fill=outline_color,
+        )
+
+    return Image.alpha_composite(base, overlay)
