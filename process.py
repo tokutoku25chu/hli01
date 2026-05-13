@@ -130,7 +130,6 @@ def process_one_image(
     counts = {spec.label: 0 for spec in U.OUTPUT_SPECS}
     counts["バッジ付与"] = 0
 
-    shift    = 0.15 if category in U.LEFT_CUT_CATEGORIES else 0.0
     raw_stem = src.stem
     norm_id  = U.normalize_product_id(raw_stem)
     entry    = size_list.get(norm_id)
@@ -163,6 +162,9 @@ def process_one_image(
             if spec.format == "ORIGINAL":
                 U.copy_original(src, out_path)
             else:
+                # ベッド系カテゴリのサムネイル (1200×1200 バッジ対象) のみ左カット
+                # それ以外はすべて完全中央クロップ
+                shift = 0.15 if (spec.can_badge and category in U.BED_CATEGORIES) else 0.0
                 resized = U.crop_and_resize(im, spec.width, spec.height, shift)
                 if spec.can_badge and badge_eligible:
                     resized = U.draw_size_badge(resized, size_code, font_path)

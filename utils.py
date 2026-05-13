@@ -33,12 +33,14 @@ CATEGORIES: List[str] = [
     "14_ブランケット",
 ]
 
-# 左カット（中心を右に15%シフト）
-LEFT_CUT_CATEGORIES = {
+# ベッド系：サムネイル（1200×1200 バッジ対象）のみ左カット（中心を右に15%シフト）
+# 他の出力サイズはすべて中央クロップ。
+BED_CATEGORIES = {
     "01_リネン",
     "11_シモンズ",
     "12_シルク真綿布団",
     "13_ダウン・フェザー製品",
+    "14_ブランケット",
 }
 
 # サイズバッジ対象カテゴリ
@@ -85,8 +87,8 @@ BADGE_FONT_RATIO = 0.50                  # 直径の50%
 BADGE_FONT_RATIO_LONG = 0.36             # USK など3文字用
 BADGE_FLOURISH_COLOR = (255, 255, 255, 220)
 
-# モデル画像 placeholder（ファイル名内のこの文字列を -model{モデル名}_ に置換）
-MODEL_MARKER = "-model_"
+# モデル画像 placeholder（ファイル名内のこの文字列を _model{モデル名}_ に置換）
+MODEL_MARKER = "_model_"
 
 # 入力フォルダ
 INPUT_DIR = Path("input")

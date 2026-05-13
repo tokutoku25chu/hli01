@@ -18,9 +18,9 @@ SAMPLES = [
     {"id": "ITEM001", "bg": (215, 200, 178), "fg": (90, 70, 50),  "label": "Linen Sample"},
     {"id": "ITEM002", "bg": (180, 195, 215), "fg": (40, 60, 110), "label": "Wear Sample"},
     {"id": "ITEM003", "bg": (200, 220, 195), "fg": (40, 100, 70), "label": "Towel Sample"},
-    # モデル placeholder のデモ用（-model_ を含むので process.py が
+    # モデル placeholder のデモ用（_model_ を含むので process.py が
     # 「モデル名を入力してください」と聞き、出力ファイル名で置換される）
-    {"id": "flinenblkt01-model_1", "bg": (230, 220, 200), "fg": (80, 60, 40), "label": "Model Shot"},
+    {"id": "flinenblkt01_model_1", "bg": (230, 220, 200), "fg": (80, 60, 40), "label": "Model Shot"},
 ]
 
 
